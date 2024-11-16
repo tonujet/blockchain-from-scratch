@@ -14,6 +14,20 @@ pub enum Key {
     Enter,
 }
 
+impl Key {
+    fn key_to_string(&self) -> &'static str {
+        use Key::*;
+
+        match self {
+            One => "1",
+            Two => "2",
+            Three => "3",
+            Four => "4",
+            Enter => panic!("Enter doesn't have number representation"),
+        }
+    }
+}
+
 /// Something you can do to the ATM
 pub enum Action {
     /// Swipe your card at the ATM. The attached value is the hash of the pin
@@ -58,7 +72,56 @@ impl StateMachine for Atm {
     type Transition = Action;
 
     fn next_state(starting_state: &Self::State, t: &Self::Transition) -> Self::State {
-        todo!("Exercise 4")
+        use Action::*;
+        use Auth::*;
+
+        let Self::State {
+            cash_inside,
+            expected_pin_hash,
+            keystroke_register,
+        } = starting_state;
+
+        let mut next_cash = *cash_inside;
+        let mut next_register = keystroke_register.to_owned();
+        let mut next_expected_pin_hash = expected_pin_hash.to_owned();
+
+        match (t, expected_pin_hash) {
+            (SwipeCard(hash), Waiting) => next_expected_pin_hash = Authenticating(*hash),
+
+            (PressKey(Key::Enter), Authenticating(hash)) => {
+                let register_hash = crate::hash(&next_register);
+                next_register = vec![];
+                if *hash == register_hash {
+                    next_expected_pin_hash = Authenticated;
+                } else {
+                    next_expected_pin_hash = Waiting;
+                }
+            }
+            (PressKey(Key::Enter), Authenticated) => {
+                let requested_cash = keystroke_register
+                    .iter()
+                    .map(|k| k.key_to_string())
+                    .collect::<String>()
+                    .parse::<u64>().expect("Expected to be only numbers in register");
+                next_register = vec![];
+                next_expected_pin_hash = Waiting;
+                if *cash_inside >= requested_cash {
+                    next_cash = *cash_inside - requested_cash
+                }
+            }
+
+            (PressKey(key), Authenticating(_) | Authenticated) => {
+                next_register.push(key.to_owned())
+            }
+
+            (_, _) => {}
+        }
+
+        Self::State {
+            cash_inside: next_cash,
+            expected_pin_hash: next_expected_pin_hash,
+            keystroke_register: next_register,
+        }
     }
 }
 
@@ -163,6 +226,7 @@ fn sm_3_enter_wrong_pin() {
     // Create hash of pin
     let pin = vec![Key::One, Key::Two, Key::Three, Key::Four];
     let pin_hash = crate::hash(&pin);
+    println!("{pin_hash}");
 
     let start = Atm {
         cash_inside: 10,
