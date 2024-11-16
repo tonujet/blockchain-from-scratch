@@ -39,36 +39,43 @@ impl StateMachine for ClothesMachine {
     type State = ClothesState;
     type Transition = ClothesAction;
 
-    fn next_state(starting_state: &ClothesState, t: &ClothesAction) -> ClothesState {
-        let state = match t {
-            ClothesAction::Wear => match starting_state {
-                ClothesState::Tattered => ClothesState::Tattered,
-                ClothesState::Clean(life) | ClothesState::Dirty(life) | ClothesState::Wet(life) => {
-                    ClothesState::Dirty(*life - 1)
-                }
-            },
-            ClothesAction::Wash => match starting_state {
-                ClothesState::Wet(life) | ClothesState::Dirty(life) | ClothesState::Clean(life) => {
-                    ClothesState::Wet(*life - 1)
-                }
-                ClothesState::Tattered => ClothesState::Tattered,
-            },
-            ClothesAction::Dry => match starting_state {
-                ClothesState::Clean(life) | ClothesState::Wet(life) => {
-                    ClothesState::Clean(*life - 1)
-                }
-                ClothesState::Dirty(life) => ClothesState::Dirty(*life - 1),
-                ClothesState::Tattered => ClothesState::Tattered,
-            },
-        };
-        match state {
-            ClothesState::Clean(life) | ClothesState::Wet(life) | ClothesState::Dirty(life)
-                if life == 0 =>
-            {
-                ClothesState::Tattered
-            }
-            _ => state,
+    fn next_state(starting_state: &ClothesState, action: &ClothesAction) -> ClothesState {
+        use ClothesAction::*;
+        use ClothesState::*;
+        
+        match (action, starting_state) {
+            (_, Clean(1) | Dirty(1) | Wet(1)) => Tattered,
+            
+            (Wear | Wash | Dry, Tattered) => Tattered,
+            
+            (Wear, Clean(life) | Dirty(life) | Wet(life)) => Dirty(*life - 1),
+            
+            (Wash, Wet(life) | Dirty(life) | Clean(life)) => Wet(*life - 1),
+            
+            (Dry, Clean(life) | Wet(life)) => Clean(*life - 1),
+            (Dry, Dirty(life)) => Dirty(*life - 1),
+            _ => unimplemented!("Not implemented action"),
         }
+
+        // let state = match action {
+        //     Wear => match starting_state {
+        //         Tattered => Tattered,
+        //         Clean(life) | Dirty(life) | Wet(life) => Dirty(*life - 1),
+        //     },
+        //     Wash => match starting_state {
+        //         Tattered => Tattered,
+        //         Wet(life) | Dirty(life) | Clean(life) => Wet(*life - 1),
+        //     },
+        //     Dry => match starting_state {
+        //         Tattered => Tattered,
+        //         Clean(life) | Wet(life) => Clean(*life - 1),
+        //         Dirty(life) => Dirty(*life - 1),
+        //     },
+        // };
+        // match state {
+        //     Clean(life) | Wet(life) | Dirty(life) if life == 0 => Tattered,
+        //     _ => state,
+        // }
     }
 }
 
