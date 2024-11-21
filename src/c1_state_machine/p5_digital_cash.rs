@@ -74,6 +74,7 @@ impl<const N: usize> From<[Bill; N]> for State {
 }
 
 /// The state transitions that users can make in a digital cash system
+#[derive(Clone)]
 pub enum CashTransaction {
     /// Mint a single new bill owned by the minter
     Mint { minter: User, amount: u64 },
@@ -93,8 +94,77 @@ impl StateMachine for DigitalCashSystem {
     type State = State;
     type Transition = CashTransaction;
 
-    fn next_state(starting_state: &Self::State, t: &Self::Transition) -> Self::State {
-        todo!("Exercise 1")
+    fn next_state(state: &Self::State, t: &Self::Transition) -> Self::State {
+        use CashTransaction::*;
+
+        match t.to_owned() {
+            Mint { minter, amount } => {
+                let next_bills = HashSet::from([Bill {
+                    owner: minter,
+                    amount,
+                    serial: state.next_serial,
+                }]);
+
+                Self::State {
+                    bills: next_bills,
+                    next_serial: state.next_serial + 1,
+                }
+            }
+
+            Transfer { spends, receives } => {
+                if spends.is_empty() {
+                    return state.clone();
+                }
+
+                for bill in &spends {
+                    if !state.bills.contains(bill) {
+                        return state.clone();
+                    }
+                }
+                for (i, bill) in receives.iter().enumerate() {
+                    if bill.amount == 0 || (bill.serial - i as u64) != state.next_serial {
+                        return state.clone();
+                    }
+                }
+
+                let unique_hashset: HashSet<u64> = spends
+                    .iter()
+                    .chain(receives.iter())
+                    .map(|b| b.serial)
+                    .collect();
+
+                if unique_hashset.len() < spends.len() + receives.len() {
+                    return state.clone();
+                }
+
+                let spent_amount: u128 = spends.iter().map(|e| e.amount as u128).sum();
+                let received_amount: u128 = receives.iter().map(|b| b.amount as u128).sum();
+
+                if received_amount > spent_amount {
+                    return state.clone();
+                }
+
+                let mut next_state = state.clone();
+
+                for bill in &spends {
+                    next_state.bills.remove(bill);
+                }
+
+                for bill in receives {
+                    next_state.bills.insert(bill);
+                }
+
+                next_state.next_serial = next_state
+                    .bills
+                    .iter()
+                    .map(|b| b.serial)
+                    .max()
+                    .unwrap_or(next_state.next_serial - 1)
+                    + 1;
+
+                next_state
+            }
+        }
     }
 }
 
