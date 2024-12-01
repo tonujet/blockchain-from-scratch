@@ -55,23 +55,35 @@ impl Header {
             state: self.state + extrinsic,
             consensus_digest: 0,
         };
+        
+        b.solve_pow();
 
         
-        loop {
-            let h = hash(&b);
-            if h >= THRESHOLD {
-                b.consensus_digest = b.consensus_digest + 1;
-                println!("Found hash: {h} is above threshold: {THRESHOLD}")
-            } else {
-                break;
-            }
-        }
+        // loop {
+        //     let h = hash(&b);
+        //     if h >= THRESHOLD {
+        //         b.consensus_digest = b.consensus_digest + 1;
+        //         println!("Found hash: {h} is above threshold: {THRESHOLD}")
+        //     } else {
+        //         break;
+        //     }
+        // }
         
         // while hash(&b) >= THRESHOLD {
         //     b.consensus_digest = b.consensus_digest + 1;    
         // }
         
         b
+    }
+    
+    fn verify_pow(&self) -> bool {
+        hash(self) < THRESHOLD
+    }
+    
+    fn solve_pow(&mut self) {
+        while !self.verify_pow() {
+            self.consensus_digest = self.consensus_digest + 1;
+        }
     }
 
     /// Verify that all the given headers form a valid chain from this header to the tip.
