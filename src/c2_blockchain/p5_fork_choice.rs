@@ -7,9 +7,10 @@
 //! Since we have nothing to add to the Block or Header data structures in this lesson,
 //! we will import them from the previous lesson.
 
+use super::p3_consensus::THRESHOLD;
 use super::p4_batched_extrinsics::{Block, Header};
 use crate::hash;
-use super::p3_consensus::THRESHOLD;
+use std::cmp::Ordering;
 
 /// Judge which blockchain is "best" when there are multiple candidates. There are several
 /// meaningful notions of "best" which is why this is a trait instead of just a
@@ -29,10 +30,16 @@ pub trait ForkChoice {
     /// Compare many chains and return the best one.
     ///
     /// It is always possible to compare several chains if you are able to compare
-    /// two chains. Therefore this method has a provided implementation. However,
+    /// two chains. Therefore, this method has a provided implementation. However,
     /// it may be much more performant to write a fork-choice-specific implementation.
     fn best_chain<'a>(candidate_chains: &[&'a [Header]]) -> &'a [Header] {
-        todo!("Exercise 1")
+        let best = candidate_chains.iter().max_by(|&&c1, &&c2| {
+            match Self::first_chain_is_better(c1, c2) {
+                true => Ordering::Greater,
+                false => Ordering::Less,
+            }
+        });
+        *best.expect("Candidate chains slice mustn't be empty")
     }
 }
 
@@ -41,14 +48,7 @@ pub struct LongestChainRule;
 
 impl ForkChoice for LongestChainRule {
     fn first_chain_is_better(chain_1: &[Header], chain_2: &[Header]) -> bool {
-        todo!("Exercise 1")
-    }
-
-    fn best_chain<'a>(candidate_chains: &[&'a [Header]]) -> &'a [Header] {
-        // Remember, this method is provided. You _can_ solve the exercise by
-        // simply deleting this block. It is up to you to decide whether this fork
-        // choice warrants a custom implementation.
-        todo!("Exercise 3")
+        chain_1.len() >= chain_2.len()
     }
 }
 
@@ -67,17 +67,22 @@ pub struct HeaviestChainRule;
 /// usage is that you create a block using the normal `Block.child()` method
 /// and then pass the block to this helper for additional mining.
 fn mine_extra_hard(block: &mut Block, threshold: u64) {
-    todo!("Exercise 4")
+    while !(hash(&block.header) < threshold) {
+        block.header.consensus_digest = block.header.consensus_digest + 1;
+    }
 }
 
 impl ForkChoice for HeaviestChainRule {
     fn first_chain_is_better(chain_1: &[Header], chain_2: &[Header]) -> bool {
-        todo!("Exercise 5")
-    }
-
-    fn best_chain<'a>(candidate_chains: &[&'a [Header]]) -> &'a [Header] {
-        // Remember, this method is provided.
-        todo!("Exercise 6")
+        let sum_hash = |chain: &[Header]| -> u64 {
+            chain
+                .iter()
+                .map(|h| hash(h))
+                .fold(0u64, |acc, h| acc.saturating_add(h))
+        };
+        let hash1 = sum_hash(chain_1);
+        let hash2 = sum_hash(chain_2);
+        hash1 <= hash2
     }
 }
 /// The best chain is the one with the most blocks that have even hashes.
@@ -98,12 +103,9 @@ pub struct MostBlocksWithEvenHash;
 
 impl ForkChoice for MostBlocksWithEvenHash {
     fn first_chain_is_better(chain_1: &[Header], chain_2: &[Header]) -> bool {
-        todo!("Exercise 7")
-    }
-
-    fn best_chain<'a>(candidate_chains: &[&'a [Header]]) -> &'a [Header] {
-        // Remember, this method is provided.
-        todo!("Exercise 8")
+        let even_hashes1 = chain_1.iter().filter(|h| hash(h) % 2 == 0).count();
+        let even_hashes2 = chain_2.iter().filter(|h| hash(h) % 2 == 0).count();
+        even_hashes1 >= even_hashes2
     }
 }
 
@@ -130,7 +132,25 @@ impl ForkChoice for MostBlocksWithEvenHash {
 /// 2. The suffix chain which is longer (non-overlapping with the common prefix)
 /// 3. The suffix chain with more work (non-overlapping with the common prefix)
 fn create_fork_one_side_longer_other_side_heavier() -> (Vec<Header>, Vec<Header>, Vec<Header>) {
-    todo!("Exercise 9")
+    let g = Block::genesis();
+    let b1 = g.child(vec![1, 2, 3]);
+    let prefix = vec![g, b1.clone()];
+
+    let b2longest = b1.child(vec![1, 2, 3]);
+    let b3longest = b2longest.child(vec![1, 2, 3]);
+    let b4longest = b3longest.child(vec![1, 2, 3]);
+    let longest = vec![b2longest, b3longest, b4longest];
+
+    let b2heaviest = b1.child(vec![1, 2, 3]);
+    let b3heaviest = b2heaviest.child(vec![1, 2, 3]);
+    let heaviest = vec![b2heaviest, b3heaviest];
+
+    let to_header = |b: Vec<Block>| b.into_iter().map(|b| b.header).collect();
+    (
+        to_header(prefix),
+        to_header(longest),
+        to_header(heaviest),
+    )
 }
 
 #[test]
@@ -168,18 +188,21 @@ fn bc_5_heaviest_chain() {
     let g = Header::genesis();
 
     let mut i = 0;
+    let mut header = g.child(hash(&[1]), 1);
     let h_a1 = loop {
-        let header = g.child(hash(&[i]), i);
+        header.consensus_digest = i;
         // Extrinsics root hash must be higher than threshold (less work done)
         if hash(&header) > THRESHOLD {
             break header;
         }
         i += 1;
     };
+
     let chain_1 = &[g.clone(), h_a1];
 
+    let mut header = g.child(hash(&[2]), 2);
     let h_b1 = loop {
-        let header = g.child(hash(&[i]), i);
+        header.consensus_digest = i;
         // Extrinsics root hash must be lower than threshold (more work done)
         if hash(&header) < THRESHOLD {
             break header;
