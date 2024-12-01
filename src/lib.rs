@@ -1,9 +1,14 @@
+#![allow(warnings)]
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 mod c1_state_machine;
+
 mod c2_blockchain;
+
 mod c3_consensus;
+
 mod c4_client;
 
 // Simple helper to do some hashing.
