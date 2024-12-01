@@ -13,7 +13,7 @@ type Hash = u64;
 /// In this lesson we are introducing proof of work onto our blocks. We need a hash threshold.
 /// You may change this as you see fit, and I encourage you to experiment. Probably best to start
 /// high so we aren't wasting time mining. I'll start with 1 in 100 blocks being valid.
-pub const THRESHOLD: u64 = u64::max_value() / 100;
+pub const THRESHOLD: u64 = u64::MAX / 100;
 
 /// In this lesson we introduce the concept of a contentious hard fork. The fork will happen at
 /// this block height.
@@ -37,12 +37,41 @@ pub struct Header {
 impl Header {
     /// Returns a new valid genesis header.
     fn genesis() -> Self {
-        todo!("Exercise 1")
+        Header {
+            parent: 0,
+            height: 0,
+            extrinsic: 0,
+            state: 0,
+            consensus_digest: 0,
+        }
     }
 
     /// Create and return a valid child header.
     fn child(&self, extrinsic: u64) -> Self {
-        todo!("Exercise 2")
+        let mut b = Header {
+            parent: hash(self),
+            height: self.height + 1,
+            extrinsic,
+            state: self.state + extrinsic,
+            consensus_digest: 0,
+        };
+
+        
+        loop {
+            let h = hash(&b);
+            if h >= THRESHOLD {
+                b.consensus_digest = b.consensus_digest + 1;
+                println!("Found hash: {h} is above threshold: {THRESHOLD}")
+            } else {
+                break;
+            }
+        }
+        
+        // while hash(&b) >= THRESHOLD {
+        //     b.consensus_digest = b.consensus_digest + 1;    
+        // }
+        
+        b
     }
 
     /// Verify that all the given headers form a valid chain from this header to the tip.
@@ -50,7 +79,25 @@ impl Header {
     /// In addition to all the rules we had before, we now need to check that the block hash
     /// is below a specific threshold.
     fn verify_sub_chain(&self, chain: &[Header]) -> bool {
-        todo!("Exercise 3")
+        let mut tip = self;
+
+        for curr in chain {
+            if curr.parent != hash(tip) || curr.height != tip.height + 1 {
+                return false
+            }
+
+            if curr.state != tip.state + curr.extrinsic {
+                return false
+            }
+            
+            if hash(curr) >= THRESHOLD {
+                return false
+            }
+            
+            tip = curr
+        }
+
+        true
     }
 
     // After the blockchain ran for a while, a political rift formed in the community.
@@ -62,13 +109,33 @@ impl Header {
     /// verify that the given headers form a valid chain.
     /// In this case "valid" means that the STATE MUST BE EVEN.
     fn verify_sub_chain_even(&self, chain: &[Header]) -> bool {
-        todo!("Exercise 4")
+        if !self.verify_sub_chain(chain) {
+            return false
+        }
+        
+        for curr in chain {
+            if curr.height > FORK_HEIGHT && curr.state % 2 !=0 {
+                return false
+            }
+        }
+        
+        true
     }
 
     /// verify that the given headers form a valid chain.
     /// In this case "valid" means that the STATE MUST BE ODD.
     fn verify_sub_chain_odd(&self, chain: &[Header]) -> bool {
-        todo!("Exercise 5")
+        if !self.verify_sub_chain(chain) {
+            return false
+        }
+
+        for curr in chain {
+            if curr.height > FORK_HEIGHT && curr.state % 2 != 1 {
+                return false
+            }
+        }
+
+        true
     }
 }
 
@@ -89,7 +156,20 @@ impl Header {
 /// G -- 1 -- 2
 ///            \-- 3'-- 4'
 fn build_contentious_forked_chain() -> (Vec<Header>, Vec<Header>, Vec<Header>) {
-    todo!("Exercise 6")
+    let g = Header::genesis();
+    let b1 = g.child(1);
+    let b2 = b1.child(2);
+    let prefix = vec![g, b1, b2.clone()];
+    
+    let b3even = b2.child(1);
+    let b4even = b3even.child(2);
+    let even = vec![b3even, b4even];    
+    
+    let b3odd = b2.child(2);
+    let b4odd = b3odd.child(2);
+    let odd = vec![b3odd, b4odd];
+
+    (prefix, even, odd)
 }
 
 // To run these tests: `cargo test bc_3`
