@@ -6,21 +6,27 @@
 //!
 //! As the state data gets large, it is no longer reasonable to store it in the blocks. But if the state isn't in the blocks,
 //! then how can we perform the state-related validation checks we previously performed? We use a state root to cryptographically
-//! link our heder to a complete state.
+//! link our header to a complete state.
 //!
 //! This notion of state may sound familiar from our previous work on state machines. Indeed this
 //! naming coincidence foreshadows a key abstraction that we will make in a coming chapter.
 
 type Hash = u64;
-use crate::hash;
 use super::p3_consensus::THRESHOLD;
+use crate::hash;
 
 /// In this section we will use sum and product together to be our state. While this is only a doubling of state size
-/// remember that in real world blockchains, the state is often really really large.
+/// remember that in real world blockchains, the state is often really, really large.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct State {
     sum: u64,
     product: u64,
+}
+
+impl AsRef<State> for State {
+    fn as_ref(&self) -> &State {
+        self
+    }
 }
 
 /// The header no longer contains the state directly, but rather, it contains a hash of
@@ -47,7 +53,13 @@ pub struct Header {
 impl Header {
     /// Returns a new valid genesis header.
     fn genesis(genesis_state_root: Hash) -> Self {
-        todo!("Exercise 1")
+        Header {
+            parent: 0,
+            height: 0,
+            extrinsics_root: hash(&Vec::<u64>::new()),
+            state_root: genesis_state_root,
+            consensus_digest: 0,
+        }
     }
 
     /// Create and return a valid child header.
@@ -55,17 +67,51 @@ impl Header {
     /// The state root is passed in similarly to how the complete state
     /// was in the previous section.
     fn child(&self, extrinsics_root: Hash, state_root: Hash) -> Self {
-        todo!("Exercise 2")
+        let mut h = Header {
+            parent: hash(self),
+            height: self.height + 1,
+            extrinsics_root,
+            state_root,
+            consensus_digest: 0,
+        };
+        h.solve_pow();
+        h
+    }
+
+    fn solve_pow(&mut self) {
+        while !self.verify_pow() {
+            self.consensus_digest = self.consensus_digest + 1;
+        }
+    }
+
+    fn verify_pow(&self) -> bool {
+        hash(self) < THRESHOLD
     }
 
     /// Verify a single child header.
     fn verify_child(&self, child: &Header) -> bool {
-        todo!("Exercise 3")
+        if child.parent != hash(self) || child.height != self.height + 1 {
+            return false;
+        }
+
+        if hash(child) >= THRESHOLD {
+            return false;
+        }
+
+        true
     }
 
     /// Verify that all the given headers form a valid chain from this header to the tip.
     fn verify_sub_chain(&self, chain: &[Header]) -> bool {
-        todo!("Exercise 4")
+        let mut tip = self;
+        for h in chain {
+            if tip.verify_child(h) {
+                return false;
+            }
+            tip = h;
+        }
+
+        true
     }
 }
 
@@ -89,12 +135,18 @@ pub struct Block {
 impl Block {
     /// Returns a new valid genesis block. By convention this block has no extrinsics.
     pub fn genesis(genesis_state: &State) -> Self {
-        todo!("Exercise 5")
+        Block {
+            header: Header::genesis(hash(genesis_state)),
+            body: vec![],
+        }
     }
 
     /// Create and return a valid child block.
     pub fn child(&self, pre_state: &State, extrinsics: Vec<u64>) -> Self {
-        todo!("Exercise 6")
+        Block {
+            header: self.header.child(hash(&extrinsics), hash(pre_state)),
+            body: extrinsics,
+        }
     }
 
     /// Verify that all the given blocks form a valid chain from this block to the tip.
@@ -103,7 +155,36 @@ impl Block {
     /// have been given a valid pre-state. And we still need to verify the headers,
     /// execute all transactions, and check the final state.
     pub fn verify_sub_chain(&self, pre_state: &State, chain: &[Block]) -> bool {
-        todo!("Exercise 7")
+        if self.header.state_root != hash(pre_state) {
+            return false;
+        }
+
+        let mut tip = self;
+        let mut b_state_box: Box<dyn AsRef<State>> = Box::new(pre_state);
+
+        for b in chain {
+            let b_state = b_state_box.as_ref().as_ref();
+
+            if b.header.extrinsics_root != hash(&b.body) {
+                return false;
+            }
+
+            if b.header.state_root != hash(b_state) {
+                return false;
+            }
+
+            if !tip.header.verify_child(&b.header) {
+                return false;
+            }
+
+            b_state_box = Box::new(State {
+                sum: b.body.iter().fold(b_state.sum, |acc, e| acc + e),
+                product: b.body.iter().fold(b_state.product, |acc, e| acc * e),
+            });
+            tip = b;
+        }
+
+        true
     }
 }
 
@@ -119,7 +200,13 @@ impl Block {
 /// As before, you do not need the entire parent block to do this. You only need the header.
 /// You do, however, now need a pre-state as you have throughout much of this section.
 fn build_invalid_child_block_with_valid_header(parent: &Header, pre_state: &State) -> Block {
-    todo!("Exercise 8")
+    let extrinsics = vec![1, 2];
+    let incorrect_state = State { sum: 0, product: 0 };
+
+    Block {
+        header: parent.child(hash(&extrinsics), hash(&incorrect_state)),
+        body: extrinsics,
+    }
 }
 
 #[test]
