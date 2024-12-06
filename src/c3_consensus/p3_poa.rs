@@ -19,16 +19,26 @@ pub struct SimplePoa {
 impl Consensus for SimplePoa {
     type Digest = ConsensusAuthority;
 
-    fn validate(&self, parent_digest: &Self::Digest, header: &Header<Self::Digest>) -> bool {
-        todo!("Exercise 1")
+    fn validate(&self, _: &Self::Digest, header: &Header<Self::Digest>) -> bool {
+        self.authorities.iter().any(|a| a == &header.consensus_digest)
     }
 
     fn seal(
         &self,
-        parent_digest: &Self::Digest,
+        _: &Self::Digest,
         partial_header: Header<()>,
     ) -> Option<Header<Self::Digest>> {
-        todo!("Exercise 2")
+        if let [authority, ..] = &self.authorities[..] {
+            return Some(Header {
+                parent: partial_header.parent,
+                height: partial_header.height,
+                state_root: partial_header.state_root,
+                extrinsics_root: partial_header.extrinsics_root,
+                consensus_digest: authority.clone(),
+            })
+        }
+
+        None
     }
 }
 
@@ -42,8 +52,23 @@ struct PoaRoundRobinByHeight {
 impl Consensus for PoaRoundRobinByHeight {
     type Digest = ConsensusAuthority;
 
-    fn validate(&self, parent_digest: &Self::Digest, header: &Header<Self::Digest>) -> bool {
-        todo!("Exercise 3")
+    fn validate(&self, _: &Self::Digest, header: &Header<Self::Digest>) -> bool {
+        if header.height == 0 {
+            return true
+        }
+
+        if self.authorities.is_empty() {
+            return false
+        }
+        
+        let authority_i = header.height as usize % self.authorities.len();
+        let authority = self.authorities[authority_i];
+        
+        if header.consensus_digest != authority {
+            return false
+        }
+
+        true
     }
 
     fn seal(
@@ -51,7 +76,22 @@ impl Consensus for PoaRoundRobinByHeight {
         parent_digest: &Self::Digest,
         partial_header: Header<()>,
     ) -> Option<Header<Self::Digest>> {
-        todo!("Exercise 4")
+        if partial_header.height == 0 {
+            return None
+        }
+
+        if self.authorities.is_empty() {
+            return None
+        }
+
+        let authority_i = partial_header.height as usize % self.authorities.len();
+        Some(Header {
+            parent: partial_header.parent,
+            height: partial_header.height,
+            state_root: partial_header.state_root,
+            extrinsics_root: partial_header.extrinsics_root,
+            consensus_digest: self.authorities[authority_i],
+        })
     }
 }
 
@@ -76,16 +116,20 @@ struct SlotDigest {
     signature: ConsensusAuthority,
 }
 
+// I didn't get to do this exercise
+
 impl Consensus for PoaRoundRobinBySlot {
     type Digest = SlotDigest;
 
-    fn validate(&self, parent_digest: &Self::Digest, header: &Header<Self::Digest>) -> bool {
+    fn validate(&self, _: &Self::Digest, header: &Header<Self::Digest>) -> bool {
+        
+        
         todo!("Exercise 5")
     }
 
     fn seal(
         &self,
-        parent_digest: &Self::Digest,
+        _: &Self::Digest,
         partial_header: Header<()>,
     ) -> Option<Header<Self::Digest>> {
         todo!("Exercise 6")
